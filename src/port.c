@@ -28,7 +28,7 @@ typedef struct port_state {
   size_t active_poll_count;
 } port_state_t;
 
-static port_state_t* port__alloc(void) {
+static inline port_state_t* port__alloc(void) {
   port_state_t* port_state = malloc(sizeof *port_state);
   if (port_state == NULL)
     return_set_error(NULL, ERROR_NOT_ENOUGH_MEMORY);
@@ -36,12 +36,12 @@ static port_state_t* port__alloc(void) {
   return port_state;
 }
 
-static void port__free(port_state_t* port) {
+static inline void port__free(port_state_t* port) {
   assert(port != NULL);
   free(port);
 }
 
-static HANDLE port__create_iocp(void) {
+static inline HANDLE port__create_iocp(void) {
   HANDLE iocp_handle =
       CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
   if (iocp_handle == NULL)
@@ -81,7 +81,7 @@ err1:
   return NULL;
 }
 
-static int port__close_iocp(port_state_t* port_state) {
+static inline int port__close_iocp(port_state_t* port_state) {
   HANDLE iocp_handle = port_state->iocp_handle;
   port_state->iocp_handle = NULL;
 
@@ -123,7 +123,7 @@ int port_delete(port_state_t* port_state) {
     poll_group_delete(poll_group);
   }
 
-  assert(queue_empty(&port_state->sock_update_queue));
+  assert(queue_is_empty(&port_state->sock_update_queue));
 
   DeleteCriticalSection(&port_state->lock);
 
@@ -137,7 +137,7 @@ static int port__update_events(port_state_t* port_state) {
 
   /* Walk the queue, submitting new poll requests for every socket that needs
    * it. */
-  while (!queue_empty(sock_update_queue)) {
+  while (!queue_is_empty(sock_update_queue)) {
     queue_node_t* queue_node = queue_first(sock_update_queue);
     sock_state_t* sock_state = sock_state_from_queue_node(queue_node);
 
@@ -150,15 +150,15 @@ static int port__update_events(port_state_t* port_state) {
   return 0;
 }
 
-static void port__update_events_if_polling(port_state_t* port_state) {
+static inline void port__update_events_if_polling(port_state_t* port_state) {
   if (port_state->active_poll_count > 0)
     port__update_events(port_state);
 }
 
-static int port__feed_events(port_state_t* port_state,
-                             struct epoll_event* epoll_events,
-                             OVERLAPPED_ENTRY* iocp_events,
-                             DWORD iocp_event_count) {
+static inline int port__feed_events(port_state_t* port_state,
+                                    struct epoll_event* epoll_events,
+                                    OVERLAPPED_ENTRY* iocp_events,
+                                    DWORD iocp_event_count) {
   int epoll_event_count = 0;
   DWORD i;
 
@@ -173,11 +173,11 @@ static int port__feed_events(port_state_t* port_state,
   return epoll_event_count;
 }
 
-static int port__poll(port_state_t* port_state,
-                      struct epoll_event* epoll_events,
-                      OVERLAPPED_ENTRY* iocp_events,
-                      DWORD maxevents,
-                      DWORD timeout) {
+static inline int port__poll(port_state_t* port_state,
+                             struct epoll_event* epoll_events,
+                             OVERLAPPED_ENTRY* iocp_events,
+                             DWORD maxevents,
+                             DWORD timeout) {
   DWORD completion_count;
 
   if (port__update_events(port_state) < 0)
@@ -283,9 +283,9 @@ int port_wait(port_state_t* port_state,
     return -1;
 }
 
-static int port__ctl_add(port_state_t* port_state,
-                         SOCKET sock,
-                         struct epoll_event* ev) {
+static inline int port__ctl_add(port_state_t* port_state,
+                                SOCKET sock,
+                                struct epoll_event* ev) {
   sock_state_t* sock_state = sock_new(port_state, sock);
   if (sock_state == NULL)
     return -1;
@@ -300,9 +300,9 @@ static int port__ctl_add(port_state_t* port_state,
   return 0;
 }
 
-static int port__ctl_mod(port_state_t* port_state,
-                         SOCKET sock,
-                         struct epoll_event* ev) {
+static inline int port__ctl_mod(port_state_t* port_state,
+                                SOCKET sock,
+                                struct epoll_event* ev) {
   sock_state_t* sock_state = port_find_socket(port_state, sock);
   if (sock_state == NULL)
     return -1;
@@ -315,7 +315,7 @@ static int port__ctl_mod(port_state_t* port_state,
   return 0;
 }
 
-static int port__ctl_del(port_state_t* port_state, SOCKET sock) {
+static inline int port__ctl_del(port_state_t* port_state, SOCKET sock) {
   sock_state_t* sock_state = port_find_socket(port_state, sock);
   if (sock_state == NULL)
     return -1;
@@ -325,10 +325,10 @@ static int port__ctl_del(port_state_t* port_state, SOCKET sock) {
   return 0;
 }
 
-static int port__ctl_op(port_state_t* port_state,
-                        int op,
-                        SOCKET sock,
-                        struct epoll_event* ev) {
+static inline int port__ctl_op(port_state_t* port_state,
+                               int op,
+                               SOCKET sock,
+                               struct epoll_event* ev) {
   switch (op) {
     case EPOLL_CTL_ADD:
       return port__ctl_add(port_state, sock, ev);
@@ -354,9 +354,9 @@ int port_ctl(port_state_t* port_state,
   return result;
 }
 
-int port_register_socket_handle(port_state_t* port_state,
-                                sock_state_t* sock_state,
-                                SOCKET socket) {
+int port_register_socket(port_state_t* port_state,
+                         sock_state_t* sock_state,
+                         SOCKET socket) {
   if (tree_add(&port_state->sock_tree,
                sock_state_to_tree_node(sock_state),
                socket) < 0)
@@ -364,8 +364,8 @@ int port_register_socket_handle(port_state_t* port_state,
   return 0;
 }
 
-void port_unregister_socket_handle(port_state_t* port_state,
-                                   sock_state_t* sock_state) {
+void port_unregister_socket(port_state_t* port_state,
+                            sock_state_t* sock_state) {
   tree_del(&port_state->sock_tree, sock_state_to_tree_node(sock_state));
 }
 
@@ -378,7 +378,7 @@ sock_state_t* port_find_socket(port_state_t* port_state, SOCKET socket) {
 
 void port_request_socket_update(port_state_t* port_state,
                                 sock_state_t* sock_state) {
-  if (queue_enqueued(sock_state_to_queue_node(sock_state)))
+  if (queue_is_enqueued(sock_state_to_queue_node(sock_state)))
     return;
   queue_append(&port_state->sock_update_queue,
                sock_state_to_queue_node(sock_state));
@@ -387,14 +387,14 @@ void port_request_socket_update(port_state_t* port_state,
 void port_cancel_socket_update(port_state_t* port_state,
                                sock_state_t* sock_state) {
   unused_var(port_state);
-  if (!queue_enqueued(sock_state_to_queue_node(sock_state)))
+  if (!queue_is_enqueued(sock_state_to_queue_node(sock_state)))
     return;
   queue_remove(sock_state_to_queue_node(sock_state));
 }
 
 void port_add_deleted_socket(port_state_t* port_state,
                              sock_state_t* sock_state) {
-  if (queue_enqueued(sock_state_to_queue_node(sock_state)))
+  if (queue_is_enqueued(sock_state_to_queue_node(sock_state)))
     return;
   queue_append(&port_state->sock_deleted_queue,
                sock_state_to_queue_node(sock_state));
@@ -403,7 +403,7 @@ void port_add_deleted_socket(port_state_t* port_state,
 void port_remove_deleted_socket(port_state_t* port_state,
                                 sock_state_t* sock_state) {
   unused_var(port_state);
-  if (!queue_enqueued(sock_state_to_queue_node(sock_state)))
+  if (!queue_is_enqueued(sock_state_to_queue_node(sock_state)))
     return;
   queue_remove(sock_state_to_queue_node(sock_state));
 }

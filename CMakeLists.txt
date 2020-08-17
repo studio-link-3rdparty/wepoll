@@ -20,6 +20,7 @@ add_definitions(-D_CRT_HAS_CXX17=0)
 file(GLOB SOURCES_DOC LICENSE *.md)
 file(GLOB_RECURSE SOURCES_CONFIG config/*.h)
 file(GLOB SOURCES_CONFIG_EXTERNAL_DLLEXPORT config/external/dllexport/*.h)
+file(GLOB SOURCES_CONFIG_EXTERNAL_BUNDLE config/external/bundle/*.h)
 file(GLOB SOURCES_CONFIG_EXTERNAL_STATIC config/external/static/*.h)
 file(GLOB SOURCES_CONFIG_INTERNAL_BUNDLE config/internal/bundle/*.h)
 file(GLOB SOURCES_CONFIG_INTERNAL_DEFAULT config/internal/default/*.h)
@@ -27,7 +28,8 @@ file(GLOB SOURCES_INCLUDE include/*.h)
 file(GLOB SOURCES_SRC src/*.c src/*.h)
 file(GLOB SOURCES_SRC_C src/*.c)
 file(GLOB SOURCES_TEST test/*.c)
-file(GLOB SOURCES_TEST_SHARED test/shared/*.c test/shared/*.h)
+file(GLOB SOURCES_TEST_LEAK_CHECK test/shared/leak-check.*)
+file(GLOB SOURCES_TEST_UTIL test/shared/test-util.*)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 source_group(doc FILES ${SOURCES_DOC})
@@ -35,7 +37,7 @@ source_group(config FILES ${SOURCES_CONFIG})
 source_group(include FILES ${SOURCES_INCLUDE})
 source_group(src FILES ${SOURCES_SRC})
 source_group("" FILES ${SOURCES_TEST})
-source_group(test/shared FILES ${SOURCES_TEST_SHARED})
+source_group(test/shared FILES ${SOURCES_TEST_LEAK_CHECK} ${SOURCES_TEST_UTIL})
 
 get_filename_component(LIB_NAME ${SOURCES_INCLUDE} NAME_WE)
 
@@ -83,8 +85,8 @@ endfunction()
 set(BUNDLE_DIST_TARGET "dist")
 set(BUNDLE_DIST_HEADER "${DIST_DIR}/${LIB_NAME}.h")
 set(BUNDLE_DIST_SOURCE "${DIST_DIR}/${LIB_NAME}.c")
-bundle_header(OUTPUT ${BUNDLE_DIST_HEADER} EXTERNAL_CONFIG static)
-bundle_source(OUTPUT ${BUNDLE_DIST_SOURCE} EXTERNAL_CONFIG static)
+bundle_header(OUTPUT ${BUNDLE_DIST_HEADER} EXTERNAL_CONFIG bundle)
+bundle_source(OUTPUT ${BUNDLE_DIST_SOURCE} EXTERNAL_CONFIG bundle)
 set_source_files_properties(
   ${BUNDLE_DIST_HEADER} ${BUNDLE_DIST_SOURCE}
   PROPERTIES GENERATED TRUE
@@ -92,7 +94,7 @@ set_source_files_properties(
 add_custom_target(
   ${BUNDLE_DIST_TARGET}
   DEPENDS ${BUNDLE_DIST_SOURCE} ${BUNDLE_DIST_HEADER}
-  SOURCES ${SOURCES_CONFIG_EXTERNAL_STATIC} ${SOURCES_CONFIG_INTERNAL_BUNDLE}
+  SOURCES ${SOURCES_CONFIG_EXTERNAL_BUNDLE} ${SOURCES_CONFIG_INTERNAL_BUNDLE}
           ${SOURCES_INCLUDE} ${SOURCES_SRC} ${SOURCES_DOC}
 )
 add_custom_command(
@@ -132,7 +134,7 @@ set(TESTING_LIB_TARGET "${LIB_NAME}-testing.lib")
 add_library(
   ${TESTING_LIB_TARGET} STATIC
   ${SOURCES_CONFIG_EXTERNAL_STATIC} ${SOURCES_CONFIG_INTERNAL_DEFAULT}
-  ${SOURCES_INCLUDE} ${SOURCES_SRC} ${SOURCES_TEST_SHARED}
+  ${SOURCES_INCLUDE} ${SOURCES_SRC} ${SOURCES_TEST_UTIL}
 )
 target_include_directories(
   ${TESTING_LIB_TARGET} PUBLIC
@@ -145,7 +147,7 @@ set_target_properties(
 
 foreach(TEST_SOURCE ${SOURCES_TEST})
   get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-  add_executable(${TEST_NAME} ${TEST_SOURCE})
+  add_executable(${TEST_NAME} ${TEST_SOURCE} ${SOURCES_TEST_LEAK_CHECK})
   target_include_directories(
     ${TEST_NAME} PUBLIC
     config/external/static config/internal/default include src test/shared

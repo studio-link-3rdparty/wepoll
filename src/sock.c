@@ -15,9 +15,9 @@
 #include "wepoll.h"
 #include "ws.h"
 
-static const uint32_t SOCK__KNOWN_EPOLL_EVENTS =
-    EPOLLIN | EPOLLPRI | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDNORM |
-    EPOLLRDBAND | EPOLLWRNORM | EPOLLWRBAND | EPOLLMSG | EPOLLRDHUP;
+#define SOCK__KNOWN_EPOLL_EVENTS                                       \
+  (EPOLLIN | EPOLLPRI | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDNORM | \
+   EPOLLRDBAND | EPOLLWRNORM | EPOLLWRBAND | EPOLLMSG | EPOLLRDHUP)
 
 typedef enum sock__poll_status {
   SOCK__POLL_IDLE = 0,
@@ -47,13 +47,14 @@ static inline sock_state_t* sock__alloc(void) {
 }
 
 static inline void sock__free(sock_state_t* sock_state) {
+  assert(sock_state != NULL);
   free(sock_state);
 }
 
-static int sock__cancel_poll(sock_state_t* sock_state) {
+static inline int sock__cancel_poll(sock_state_t* sock_state) {
   assert(sock_state->poll_status == SOCK__POLL_PENDING);
 
-  if (afd_cancel_poll(poll_group_get_afd_helper_handle(sock_state->poll_group),
+  if (afd_cancel_poll(poll_group_get_afd_device_handle(sock_state->poll_group),
                       &sock_state->io_status_block) < 0)
     return -1;
 
@@ -90,7 +91,7 @@ sock_state_t* sock_new(port_state_t* port_state, SOCKET socket) {
   tree_node_init(&sock_state->tree_node);
   queue_node_init(&sock_state->queue_node);
 
-  if (port_register_socket_handle(port_state, sock_state, socket) < 0)
+  if (port_register_socket(port_state, sock_state, socket) < 0)
     goto err2;
 
   return sock_state;
@@ -111,7 +112,7 @@ static int sock__delete(port_state_t* port_state,
       sock__cancel_poll(sock_state);
 
     port_cancel_socket_update(port_state, sock_state);
-    port_unregister_socket_handle(port_state, sock_state);
+    port_unregister_socket(port_state, sock_state);
 
     sock_state->delete_pending = true;
   }
@@ -145,7 +146,7 @@ int sock_set_event(port_state_t* port_state,
                    const struct epoll_event* ev) {
   /* EPOLLERR and EPOLLHUP are always reported, even when not requested by the
    * caller. However they are disabled after a event has been reported for a
-   * socket for which the EPOLLONESHOT flag as set. */
+   * socket for which the EPOLLONESHOT flag was set. */
   uint32_t events = ev->events | EPOLLERR | EPOLLHUP;
 
   sock_state->user_events = events;
@@ -232,7 +233,7 @@ int sock_update(port_state_t* port_state, sock_state_t* sock_state) {
     sock_state->poll_info.Handles[0].Events =
         sock__epoll_events_to_afd_events(sock_state->user_events);
 
-    if (afd_poll(poll_group_get_afd_helper_handle(sock_state->poll_group),
+    if (afd_poll(poll_group_get_afd_device_handle(sock_state->poll_group),
                  &sock_state->poll_info,
                  &sock_state->io_status_block) < 0) {
       switch (GetLastError()) {
